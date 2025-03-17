@@ -49,9 +49,11 @@
 
 uint8_t gu8_KeyStatesArr[KEYS] = {0};
 uint8_t SysTicks = 0;
+char Pressed_key = ' ';
 
 void SysTick_CallBack(void);
 void Display_Handler(void);
+
 
 /* USER CODE END Includes */
 
@@ -95,103 +97,103 @@ void Display_Handler(void);//Keypad
 /* USER CODE BEGIN 0 */
 
 /*---------------------------------------gps handle------------------------------------------*/
-uint8_t rxBuffer[128] = {0};
-uint8_t rxIndex = 0;
-uint8_t rxData;
-float nmeaLong;
-float nmeaLat;
-float utcTime;
-char northsouth;
-char eastwest;
-char posStatus;
-float decimalLong;
-float decimalLat;
-
-float nmeaToDecimal(float coordinate) {
-    int degree = (int)(coordinate/100);
-    float minutes = coordinate - degree * 100;
-    float decimalDegree = minutes / 60;
-    float decimal = degree + decimalDegree;
-    return decimal;
-}
-
-void gpsParse(char *strParse){
-  if(!strncmp(strParse, "$GPGGA", 6)){
-    sscanf(strParse, "$GPGGA,%f,%f,%c,%f,%c",
-      &utcTime, &nmeaLat, &northsouth, &nmeaLong, &eastwest);
-    decimalLat = nmeaToDecimal(nmeaLat);
-    decimalLong = nmeaToDecimal(nmeaLong);
-  }
-  else if (!strncmp(strParse, "$GPGLL", 6)){
-    sscanf(strParse, "$GPGLL,%f,%c,%f,%c,%f",
-      &nmeaLat, &northsouth, &nmeaLong, &eastwest, &utcTime);
-    decimalLat = nmeaToDecimal(nmeaLat);
-    decimalLong = nmeaToDecimal(nmeaLong);
-  }
-  else if (!strncmp(strParse, "$GPRMC", 6)){
-    sscanf(strParse, "$GPRMC,%f,%c,%f,%c,%f,%c",
-      &utcTime, &posStatus, &nmeaLat, &northsouth, &nmeaLong, &eastwest);
-    decimalLat = nmeaToDecimal(nmeaLat);
-    decimalLong = nmeaToDecimal(nmeaLong);
-  }
-}
-
-int gpsValidate(char *nmea){
-    char check[3];
-    char calculatedString[3];
-    int index;
-    int calculatedCheck;
-
-    index=0;
-    calculatedCheck=0;
-
-    // Ensure that the string starts with a "$"
-    if(nmea[index] == '$')
-        index++;
-    else
-        return 0;
-
-    //No NULL reached, 75 char largest possible NMEA message, no '*' reached
-    while((nmea[index] != 0) && (nmea[index] != '*') && (index < 75)){
-        calculatedCheck ^= nmea[index];// calculate the checksum
-        index++;
-    }
-
-    if(index >= 75){
-        return 0;// the string is too long so return an error
-    }
-
-    if (nmea[index] == '*'){
-        check[0] = nmea[index+1];    //put hex chars in check string
-        check[1] = nmea[index+2];
-        check[2] = 0;
-    }
-    else
-        return 0;// no checksum separator found therefore invalid data
-
-    sprintf(calculatedString,"%02X",calculatedCheck);
-    return((calculatedString[0] == check[0])
-        && (calculatedString[1] == check[1])) ? 1 : 0 ;
-}
-
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-  if(huart->Instance==USART1)
-  {
-    // if the character received is other than 'enter' ascii13, save the data in buffer
-    if(rxData!='\n' && rxIndex < sizeof(rxBuffer))
-    {
-      rxBuffer[rxIndex++]=rxData;
-    }
-    else
-    {
-      if(gpsValidate((char*) rxBuffer)) gpsParse((char*) rxBuffer);
-      rxIndex=0;
-      memset(rxBuffer,0,sizeof(rxBuffer));
-    }
-    HAL_UART_Receive_IT(&huart1,&rxData,1); // Enabling interrupt receive again
-  }
-}
+//uint8_t rxBuffer[128] = {0};
+//uint8_t rxIndex = 0;
+//uint8_t rxData;
+//float nmeaLong;
+//float nmeaLat;
+//float utcTime;
+//char northsouth;
+//char eastwest;
+//char posStatus;
+//float decimalLong;
+//float decimalLat;
+//
+//float nmeaToDecimal(float coordinate) {
+//    int degree = (int)(coordinate/100);
+//    float minutes = coordinate - degree * 100;
+//    float decimalDegree = minutes / 60;
+//    float decimal = degree + decimalDegree;
+//    return decimal;
+//}
+//
+//void gpsParse(char *strParse){
+//  if(!strncmp(strParse, "$GPGGA", 6)){
+//    sscanf(strParse, "$GPGGA,%f,%f,%c,%f,%c",
+//      &utcTime, &nmeaLat, &northsouth, &nmeaLong, &eastwest);
+//    decimalLat = nmeaToDecimal(nmeaLat);
+//    decimalLong = nmeaToDecimal(nmeaLong);
+//  }
+//  else if (!strncmp(strParse, "$GPGLL", 6)){
+//    sscanf(strParse, "$GPGLL,%f,%c,%f,%c,%f",
+//      &nmeaLat, &northsouth, &nmeaLong, &eastwest, &utcTime);
+//    decimalLat = nmeaToDecimal(nmeaLat);
+//    decimalLong = nmeaToDecimal(nmeaLong);
+//  }
+//  else if (!strncmp(strParse, "$GPRMC", 6)){
+//    sscanf(strParse, "$GPRMC,%f,%c,%f,%c,%f,%c",
+//      &utcTime, &posStatus, &nmeaLat, &northsouth, &nmeaLong, &eastwest);
+//    decimalLat = nmeaToDecimal(nmeaLat);
+//    decimalLong = nmeaToDecimal(nmeaLong);
+//  }
+//}
+//
+//int gpsValidate(char *nmea){
+//    char check[3];
+//    char calculatedString[3];
+//    int index;
+//    int calculatedCheck;
+//
+//    index=0;
+//    calculatedCheck=0;
+//
+//    // Ensure that the string starts with a "$"
+//    if(nmea[index] == '$')
+//        index++;
+//    else
+//        return 0;
+//
+//    //No NULL reached, 75 char largest possible NMEA message, no '*' reached
+//    while((nmea[index] != 0) && (nmea[index] != '*') && (index < 75)){
+//        calculatedCheck ^= nmea[index];// calculate the checksum
+//        index++;
+//    }
+//
+//    if(index >= 75){
+//        return 0;// the string is too long so return an error
+//    }
+//
+//    if (nmea[index] == '*'){
+//        check[0] = nmea[index+1];    //put hex chars in check string
+//        check[1] = nmea[index+2];
+//        check[2] = 0;
+//    }
+//    else
+//        return 0;// no checksum separator found therefore invalid data
+//
+//    sprintf(calculatedString,"%02X",calculatedCheck);
+//    return((calculatedString[0] == check[0])
+//        && (calculatedString[1] == check[1])) ? 1 : 0 ;
+//}
+//
+//void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+//{
+//  if(huart->Instance==USART1)
+//  {
+//    // if the character received is other than 'enter' ascii13, save the data in buffer
+//    if(rxData!='\n' && rxIndex < sizeof(rxBuffer))
+//    {
+//      rxBuffer[rxIndex++]=rxData;
+//    }
+//    else
+//    {
+//      if(gpsValidate((char*) rxBuffer)) gpsParse((char*) rxBuffer);
+//      rxIndex=0;
+//      memset(rxBuffer,0,sizeof(rxBuffer));
+//    }
+//    HAL_UART_Receive_IT(&huart1,&rxData,1); // Enabling interrupt receive again
+//  }
+//}
 /*--------------------------------------------end gps handle--------------------------------------*/
 
 /* USER CODE END 0 */
@@ -229,7 +231,7 @@ int main(void)
   MX_USB_DEVICE_Init();
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
-  HAL_UART_Receive_IT(&huart1,&rxData,1);
+  ////////////////////////////////////////////////////////////////////HAL_UART_Receive_IT(&huart1,&rxData,1);
   KEYPAD_Init(0, gu8_KeyStatesArr);
   /* USER CODE END 2 */
 
@@ -240,11 +242,11 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	    char TxBuffer_gps[64];  // Buffer for transmission
+	    char TxBuffer_gps[16];  // Buffer for transmission
 	    int TxBufferLen_gps;
 
 	    // Convert floats to a formatted string (e.g., "12.34,56.78\n")
-	    TxBufferLen_gps = snprintf(TxBuffer_gps, sizeof(TxBuffer_gps), "%.5d,%.5f\n", SysTicks /*decimalLong*/, decimalLat);
+	    TxBufferLen_gps = snprintf(TxBuffer_gps, sizeof(TxBuffer_gps), "%c,%.5d\n", Pressed_key /*decimalLong*/, SysTicks /*decimalLat*/);
 
 	    // Transmit via USB CDC
 	    CDC_Transmit_FS((uint8_t*)TxBuffer_gps, TxBufferLen_gps);
@@ -399,16 +401,16 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOB_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOB, Col_3_Pin|Col_2_Pin|Col_1_Pin|Col_0_Pin, GPIO_PIN_RESET);
+  HAL_GPIO_WritePin(GPIOB, Col_0_Pin|Col_1_Pin|Col_2_Pin|Col_3_Pin, GPIO_PIN_RESET);
 
-  /*Configure GPIO pins : Row_3_Pin Row_2_Pin Row_1_Pin Row_0_Pin */
-  GPIO_InitStruct.Pin = Row_3_Pin|Row_2_Pin|Row_1_Pin|Row_0_Pin;
+  /*Configure GPIO pins : Row_0_Pin Row_1_Pin Row_2_Pin Row_3_Pin */
+  GPIO_InitStruct.Pin = Row_0_Pin|Row_1_Pin|Row_2_Pin|Row_3_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : Col_3_Pin Col_2_Pin Col_1_Pin Col_0_Pin */
-  GPIO_InitStruct.Pin = Col_3_Pin|Col_2_Pin|Col_1_Pin|Col_0_Pin;
+  /*Configure GPIO pins : Col_0_Pin Col_1_Pin Col_2_Pin Col_3_Pin */
+  GPIO_InitStruct.Pin = Col_0_Pin|Col_1_Pin|Col_2_Pin|Col_3_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -423,6 +425,7 @@ static void MX_GPIO_Init(void)
 void SysTick_CallBack(void)
 {
     SysTicks++;
+    //Pressed_key++;
     if(SysTicks == 5) // Each 5msec
     {
     KEYPAD_Scan(0);
@@ -432,94 +435,111 @@ void SysTick_CallBack(void)
 
 void Display_Handler(void)
 {
+	//char pressed[2];
+
     if(gu8_KeyStatesArr[KEY_1] == KEY_PRESSED)
     {
     //LCD_Write_Char('1');
-    int a;
+    	Pressed_key= '1';
     while(gu8_KeyStatesArr[KEY_1] == KEY_PRESSED);
     }
     if(gu8_KeyStatesArr[KEY_2] == KEY_PRESSED)
     {
     //LCD_Write_Char('2');
-    int a;
+    	Pressed_key = '2';
     while(gu8_KeyStatesArr[KEY_2] == KEY_PRESSED);
     }
     if(gu8_KeyStatesArr[KEY_3] == KEY_PRESSED)
     {
     //LCD_Write_Char('3');
-    int a;
+    	Pressed_key = '3';
     while(gu8_KeyStatesArr[KEY_3] == KEY_PRESSED);
     }
     if(gu8_KeyStatesArr[KEY_4] == KEY_PRESSED)
     {
     //LCD_Write_Char('4');
-    int a;
+    	Pressed_key = '4';
     while(gu8_KeyStatesArr[KEY_4] == KEY_PRESSED);
     }
     if(gu8_KeyStatesArr[KEY_5] == KEY_PRESSED)
     {
     //LCD_Write_Char('5');
-    int a;
+    	Pressed_key = '5';
     while(gu8_KeyStatesArr[KEY_5] == KEY_PRESSED);
     }
     if(gu8_KeyStatesArr[KEY_6] == KEY_PRESSED)
     {
     //LCD_Write_Char('6');
-    int a;
+    	Pressed_key = '6';
+
     while(gu8_KeyStatesArr[KEY_6] == KEY_PRESSED);
     }
     if(gu8_KeyStatesArr[KEY_7] == KEY_PRESSED)
     {
     //LCD_Write_Char('7');
-    	int a;
+    	Pressed_key = '7';
+
     while(gu8_KeyStatesArr[KEY_7] == KEY_PRESSED);
     }
     if(gu8_KeyStatesArr[KEY_8] == KEY_PRESSED)
     {
     //LCD_Write_Char('8');
-    	int a;
+    	Pressed_key = '8';
+
     while(gu8_KeyStatesArr[KEY_8] == KEY_PRESSED);
     }
     if(gu8_KeyStatesArr[KEY_9] == KEY_PRESSED)
     {
     //LCD_Write_Char('9');
-    	int a;
+    	Pressed_key = '9';
+
     while(gu8_KeyStatesArr[KEY_9] == KEY_PRESSED);
     }
     if(gu8_KeyStatesArr[KEY_0] == KEY_PRESSED)
     {
     //LCD_Write_Char('0');
-    	int a;
+    	Pressed_key = '0';
+
     while(gu8_KeyStatesArr[KEY_0] == KEY_PRESSED);
     }
     if(gu8_KeyStatesArr[KEY_A] == KEY_PRESSED)
     {
     //LCD_Write_Char('*');
-    	int a;
+    	Pressed_key = '*';
+
     while(gu8_KeyStatesArr[KEY_A] == KEY_PRESSED);
     }
     if(gu8_KeyStatesArr[KEY_H] == KEY_PRESSED)
     {
     //LCD_Write_Char('#');
-    	int a;
+    	Pressed_key = '#';
+
     while(gu8_KeyStatesArr[KEY_H] == KEY_PRESSED);
     }
     if(gu8_KeyStatesArr[KEY_F1] == KEY_PRESSED)
     {
     //LCD_SR();
-    	int a;
+    	Pressed_key = 'A';
     while(gu8_KeyStatesArr[KEY_F1] == KEY_PRESSED);
     }
     if(gu8_KeyStatesArr[KEY_F2] == KEY_PRESSED)
     {
     //LCD_SL();
-    	int a;
+    	Pressed_key = 'B';
     while(gu8_KeyStatesArr[KEY_F2] == KEY_PRESSED);
+    }
+    if(gu8_KeyStatesArr[KEY_F3] == KEY_PRESSED)
+    {
+    //LCD_Clear();
+    	Pressed_key = 'C';
+
+    while(gu8_KeyStatesArr[KEY_F3] == KEY_PRESSED);
     }
     if(gu8_KeyStatesArr[KEY_F4] == KEY_PRESSED)
     {
     //LCD_Clear();
-    	int a;
+    	Pressed_key = 'D';
+
     while(gu8_KeyStatesArr[KEY_F4] == KEY_PRESSED);
     }
 }
