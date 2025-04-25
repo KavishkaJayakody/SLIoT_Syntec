@@ -39,4 +39,12 @@ const uint8_t KEYPAD_COL_PINS[4] = {26, 25, 33, 32};
 #define TCP_MESSAGE_BUFFER_SIZE 200
 #define SMS_MESSAGE_BUFFER_SIZE 100
 
+// Printer UART
+#define TX_PIN 18  
+#define RX_PIN 19  
+
+// Keypad pin definitions
+const uint8_t ROW_PINS[4] = {13, 12, 14, 27}; // Connect to the row pinouts of the keypad
+const uint8_t COL_PINS[4] = {26, 25, 33, 32}; // Connect to the column pinouts of the keypad
+
 #endif // CONFIG_H 

@@ -1,20 +1,15 @@
 #include <Arduino.h>
-#include "Config.h"
-#include "GPS.h"
-#include "GPRS.h"
-#include "KEYPAD.h"
-
-HardwareSerial Serial2(GPS_SERIAL_NUM);  // Define Serial2 for GPS
-HardwareSerial Serial1(GPRS_SERIAL_NUM); // Define Serial1 for GPRS
-
-// Keypad pin definitions
-const uint8_t ROW_PINS[4] = {13, 12, 14, 27}; // Connect to the row pinouts of the keypad
-const uint8_t COL_PINS[4] = {26, 25, 33, 32}; // Connect to the column pinouts of the keypad
+#include "config.h"
+#include "gps.h"
+#include "gprs.h"
+#include "printer.h"
+#include "keypad.h"
 
 // Create instances
 GPS gps(&Serial2, GPS_RX_PIN, GPS_TX_PIN);
 GPRS gprs(&Serial1, GPRS_RX_PIN, GPRS_TX_PIN);
 Keypad keypad(KEYPAD_ROW_PINS, KEYPAD_COL_PINS);
+Printer printer;
 
 void handleKeypress(char key) {
     Serial.print("Key pressed: ");
@@ -48,8 +43,14 @@ void handleKeypress(char key) {
 }
 
 void setup() {
-    Serial.begin(DEBUG_BAUD_RATE);  // Debug serial
+    //Serial.begin(DEBUG_BAUD_RATE);  // Debug serial
     
+
+    printer.begin();
+
+    printer.printBill("ND-2314", "Syntech Transit(Pvt) Ltd", "0012", "2025/03/21", "15:23", "10000000001", "Moratuwa - Nittambuwa", "Katubedda", "Kadawatha", 1, 2, 260.00, "0703482664", "0332297800");
+  
+    printer.printBill("ND-2314", "Syntech Transit(Pvt) Ltd", "0012", "2025/03/21", "15:23", "10000000001", "Moratuwa - Nittambuwa", "Katubedda", "Kadawatha", 1, 2, 260.00, "0703482664", "0332297800");
     // Initialize GPRS
     if (gprs.begin()) {
         Serial.println("GPRS initialized successfully");
