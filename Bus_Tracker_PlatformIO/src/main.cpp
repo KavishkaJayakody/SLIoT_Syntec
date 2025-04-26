@@ -1,35 +1,32 @@
 #include <Arduino.h>
 #include "Config.h"
 #include "GPS.h"
-//#include "GPRS.h"
 #include "Key_Receiver.h"
 #include "Bus_Ticket_Printer.h"
 #include "Bus_Data.h"
-#include "Bus_Data.h"
+#include "Bus_Display.h"
 #include <Ticker.h>
 
 // Define hardware serial ports
 HardwareSerial gpsSerial(GPS_SERIAL_NUM);
-//HardwareSerial gprsSerial(GPRS_SERIAL_NUM);
 
 // Create instances
 GPS gps(&gpsSerial, GPS_RX_PIN, GPS_TX_PIN);
-//GPRS gprs(&gprsSerial, GPRS_RX_PIN, GPRS_TX_PIN);
 KeyReceiver keyReceiver;
 BusTicketPrinter ticketPrinter;
+BusDisplay display;
 BusData bus;
 
+// Ticker objects
 Ticker gpsTicker;
 Ticker timeTicker;
 Ticker sendTicker;
-
-
+Ticker displayTicker;
 
 void updateGPS() {
     gps.update();  // Parse new GPS data
     bus.latitude = gps.getLatitude();
     bus.longitude = gps.getLongitude();
-    //Serial.printf("GPS Updated -> Lat: %.6f, Lon: %.6f\n", bus.latitude, bus.longitude);
 }
 
 void updateTime() {
@@ -51,15 +48,21 @@ void updateTime() {
         char timeBuffer[9];
         snprintf(timeBuffer, sizeof(timeBuffer), "%02d:%02d:%02d", h, m, s);
         bus.time = String(timeBuffer);
-
-        //Serial.printf("Time Updated -> %s %s\n", bus.date.c_str(), bus.time.c_str());
+        
+        // Update the time on the display as well
+        display.setTime(h, m, s);
     } else {
         Serial.println("Invalid time format in bus.time");
     }
 }
 
+// LVGL update function for the ticker
+void updateDisplay() {
+    display.update();  // Call lv_timer_handler() inside
+}
 
 void setup() {
+    // Initialize bus data
     bus.registrationNumber = "ND-2314";
     bus.companyName = "Syntech Transit (Pvt) Ltd";
     bus.routeNumber = "0012";
@@ -85,24 +88,61 @@ void setup() {
     // Initialize GPS serial
     gpsSerial.begin(GPS_BAUD_RATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
     
-    // Initialize GPRS serial
-    //gprsSerial.begin(GPRS_BAUD_RATE, SERIAL_8N1, GPRS_RX_PIN, GPRS_TX_PIN);
-
+    // Initialize components
     keyReceiver.begin();
-
-    gpsTicker.attach(1.0, updateGPS);   // every 2 seconds
-    timeTicker.attach(1.0, updateTime); // every 5 seconds
+    ticketPrinter.begin();
+    display.begin();
+    
+    // Set the location on display
+    display.setLocation(bus.fromHalt.c_str());
+    
+    // Parse initial time and set display
+    int h, m, s;
+    if (sscanf(bus.time.c_str(), "%d:%d:%d", &h, &m, &s) == 3) {
+        display.setTime(h, m, s);
+    }
+    
+    // Set date on display (assuming a date format of YYYY/MM/DD)
+    int y, mo, d;
+    if (sscanf(bus.date.c_str(), "%d/%d/%d", &y, &mo, &d) == 3) {
+        // Calculate the day of week (simple algorithm, may not be accurate for all dates)
+        // This is just for demonstration - in a real app, use a proper calendar library
+        int weekday = (d + mo + y + (y/4)) % 7;
+        display.setDate(y, mo-1, d, weekday); // month-1 because our array is 0-indexed
+    }
+    
+    // Set up tickers
+    gpsTicker.attach(1.0, updateGPS);     // Update GPS every second
+    timeTicker.attach(1.0, updateTime);   // Update time every second
+    displayTicker.attach(0.02, updateDisplay); // Update LVGL at 50Hz
+    
     sendTicker.attach(2.0, []() {
         // Send GPS data to server
         char tcpMessage[TCP_MESSAGE_BUFFER_SIZE];
         snprintf(tcpMessage, sizeof(tcpMessage), 
                 "{\"id\":\"%s\",\"lat\":%.6f,\"lon\":%.6f,\"tim\":%s,\"txt\":\"%s, \"halt\":\"%s\",\"pass\":%d,\"dest\":\"%s\"}",
-                DEVICE_ID, bus.latitude, bus.longitude, bus.time, keyReceiver.current_text.c_str(),
+                DEVICE_ID, bus.latitude, bus.longitude, bus.time.c_str(), keyReceiver.current_text.c_str(),
                 bus.getCurrentHaltName(), bus.passengerCount, bus.getDestinationHaltName());
         Serial.println(tcpMessage);
     });
 
-    ticketPrinter.begin();
+    // Set ticket printer data
+    ticketPrinter.setTicketData(
+        bus.registrationNumber,
+        bus.companyName,
+        bus.routeNumber,
+        bus.date,
+        bus.time,
+        bus.referenceNumber,
+        bus.routeName,
+        bus.fromHalt,
+        bus.toHalt,
+        bus.isFullTicket,
+        bus.ticketCount,
+        bus.unitPrice,
+        bus.driverPhone,
+        bus.hotline
+    );
 
     // Print welcome message
     Serial.println("\nBus Ticketing System Ready");
@@ -113,28 +153,13 @@ void setup() {
     Serial.println("C: Print ticket");
     Serial.println("UP/DOWN: Navigate between halts");
     Serial.println("Current Halt: " + String(bus.getCurrentHaltName()));
-
-    ticketPrinter.setTicketData(
-        "ND-2314", "Syntech Transit(Pvt) Ltd", "0012", "2025/03/21", "15:23",
-        "10000000001", "Moratuwa - Nittambuwa", "Katubedda", "Kadawatha",
-        true, 2, 260.00, "0703482664", "0332297800"
-    );
-    
-
-    // Serial.println("Ticket printing Test.");
-    // ticketPrinter.printTicket();
-    // Serial.println("Ticket printed successfully.");
-    // delay(2000); // Wait for the printer to finish printing
-
-    
 }
 
 void loop() {
-    //keyReceiver.waitForInputUntil(KEY_ENTER); // Wait for ENTER key
     keyReceiver.check_Key_and_Execute();
-    //bus.goToNextHalt();
-    //delay(10000);
-
+    
+    // Note: No need to call lv_timer_handler() here
+    // because it's being handled by the displayTicker
+    
+    // No need for delay in the main loop
 }
-
-
