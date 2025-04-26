@@ -2,108 +2,127 @@
 #include "Config.h"
 #include "GPS.h"
 #include "GPRS.h"
-#include "KEYPAD.h"
+#include "Key_Receiver.h"
+#include "Bus_Ticket_Printer.h"
+#include "Bus_Data.h"
+#include "Bus_Data.h"
+#include <Ticker.h>
 
-HardwareSerial Serial2(GPS_SERIAL_NUM);  // Define Serial2 for GPS
-HardwareSerial Serial1(GPRS_SERIAL_NUM); // Define Serial1 for GPRS
-
-// Keypad pin definitions
-const uint8_t ROW_PINS[4] = {13, 12, 14, 27}; // Connect to the row pinouts of the keypad
-const uint8_t COL_PINS[4] = {26, 25, 33, 32}; // Connect to the column pinouts of the keypad
+// Define hardware serial ports
+HardwareSerial gpsSerial(GPS_SERIAL_NUM);
+HardwareSerial gprsSerial(GPRS_SERIAL_NUM);
 
 // Create instances
-GPS gps(&Serial2, GPS_RX_PIN, GPS_TX_PIN);
-GPRS gprs(&Serial1, GPRS_RX_PIN, GPRS_TX_PIN);
-Keypad keypad(KEYPAD_ROW_PINS, KEYPAD_COL_PINS);
+GPS gps(&gpsSerial, GPS_RX_PIN, GPS_TX_PIN);
+GPRS gprs(&gprsSerial, GPRS_RX_PIN, GPRS_TX_PIN);
+KeyReceiver keyReceiver;
+BusTicketPrinter ticketPrinter;
+BusData bus;
 
-void handleKeypress(char key) {
-    Serial.print("Key pressed: ");
-    Serial.println(key);
-    
-    switch(key) {
-        case 'A': // Send current location via SMS
-            {
-                float lat = gps.getLatitude();
-                float lon = gps.getLongitude();
-                char message[SMS_MESSAGE_BUFFER_SIZE];
-                snprintf(message, sizeof(message), "Location: %.6f, %.6f", lat, lon);
-                gprs.sendSMS(DEFAULT_SMS_NUMBER, message);
-            }
-            break;
-            
-        case 'B': // Reconnect TCP
-            gprs.connectTCP(TCP_SERVER, TCP_PORT);
-            break;
-            
-        case 'C': // Print current location to Serial
-            Serial.printf("Lat: %.6f, Lon: %.6f\n", 
-                        gps.getLatitude(), 
-                        gps.getLongitude());
-            break;
-            
-        case 'D': // Disconnect TCP
-            gprs.disconnectTCP();
-            break;
+Ticker gpsTicker;
+Ticker timeTicker;
+Ticker sendTicker;
+
+
+
+void updateGPS() {
+    gps.update();  // Parse new GPS data
+    bus.latitude = gps.getLatitude();
+    bus.longitude = gps.getLongitude();
+    //Serial.printf("GPS Updated -> Lat: %.6f, Lon: %.6f\n", bus.latitude, bus.longitude);
+}
+
+void updateTime() {
+    int h, m, s;
+    if (sscanf(bus.time.c_str(), "%d:%d:%d", &h, &m, &s) == 3) {
+        s += 1;
+        if (s >= 60) {
+            m += s / 60;
+            s %= 60;
+        }
+        if (m >= 60) {
+            h += m / 60;
+            m %= 60;
+        }
+        if (h >= 24) {
+            h %= 24;
+        }
+
+        char timeBuffer[9];
+        snprintf(timeBuffer, sizeof(timeBuffer), "%02d:%02d:%02d", h, m, s);
+        bus.time = String(timeBuffer);
+
+        //Serial.printf("Time Updated -> %s %s\n", bus.date.c_str(), bus.time.c_str());
+    } else {
+        Serial.println("Invalid time format in bus.time");
     }
 }
 
+
 void setup() {
-    Serial.begin(DEBUG_BAUD_RATE);  // Debug serial
+    bus.registrationNumber = "ND-2314";
+    bus.companyName = "Syntech Transit (Pvt) Ltd";
+    bus.routeNumber = "0012";
+    bus.referenceNumber = "10000000001";
+  
+    bus.routeName = "Moratuwa - Nittambuwa";
+    bus.fromHalt = "Katubedda";
+    bus.toHalt = "Kadawatha";
+    bus.isFullTicket = true;
+  
+    bus.date = "2025/03/21";
+    bus.time = "09:00:00";
+  
+    bus.ticketCount = 2;
+    bus.unitPrice = 130.00;
+  
+    bus.driverPhone = "0703482664";
+    bus.hotline = "0332297800";
+
+    // Initialize debug serial
+    Serial.begin(115200);
     
-    // Initialize GPRS
-    if (gprs.begin()) {
-        Serial.println("GPRS initialized successfully");
-        
-        // Initialize GPRS data connection
-        if (gprs.initGPRS(GPRS_APN)) {
-            Serial.println("GPRS data connection initialized");
-            
-            // Connect to TCP server
-            if (gprs.connectTCP(TCP_SERVER, TCP_PORT)) {
-                Serial.println("Connected to TCP server");
-            } else {
-                Serial.println("Failed to connect to TCP server");
-            }
-        }
-    } else {
-        Serial.println("GPRS initialization failed");
-    }
+    // Initialize GPS serial
+    gpsSerial.begin(GPS_BAUD_RATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+    
+    // Initialize GPRS serial
+    gprsSerial.begin(GPRS_BAUD_RATE, SERIAL_8N1, GPRS_RX_PIN, GPRS_TX_PIN);
+
+    keyReceiver.begin();
+
+    gpsTicker.attach(1.0, updateGPS);   // every 2 seconds
+    timeTicker.attach(1.0, updateTime); // every 5 seconds
+    sendTicker.attach(0.10, []() {
+        // Send GPS data to server
+        char tcpMessage[TCP_MESSAGE_BUFFER_SIZE];
+        snprintf(tcpMessage, sizeof(tcpMessage), 
+                "{\"id\":\"%s\",\"lat\":%.6f,\"lon\":%.6f,\"tim\":%s,\"txt\":\"%s, \"halt\":\"%s\"}",
+                DEVICE_ID, bus.latitude, bus.longitude, bus.time,keyReceiver.current_text.c_str(),bus.getCurrentHaltName());
+        Serial.println(tcpMessage);
+    });
+
+    ticketPrinter.begin();
+
+    ticketPrinter.setTicketData(
+        "ND-2314", "Syntech Transit(Pvt) Ltd", "0012", "2025/03/21", "15:23",
+        "10000000001", "Moratuwa - Nittambuwa", "Katubedda", "Kadawatha",
+        true, 2, 260.00, "0703482664", "0332297800"
+    );
+
+    // Serial.println("Ticket printing Test.");
+    // ticketPrinter.printTicket();
+    // Serial.println("Ticket printed successfully.");
+    // delay(2000); // Wait for the printer to finish printing
+
+    
 }
 
 void loop() {
-    // Update GPS data
-    gps.update();
-    
-    // Update GPRS (check for incoming messages/status)
-    gprs.update();
-    
-    // Check for keypad input
-    char key = keypad.getKey();
-    if (key != '\0') {
-        handleKeypress(key);
-    }
-    
-    // Send data every interval
-    static unsigned long lastSendTime = 0;
-    if (millis() - lastSendTime > TCP_UPDATE_INTERVAL) {
-        float lat = gps.getLatitude();
-        float lon = gps.getLongitude();
-        
-        // Create JSON formatted data
-        char tcpMessage[TCP_MESSAGE_BUFFER_SIZE];
-        snprintf(tcpMessage, sizeof(tcpMessage), 
-                "{\"device_id\":\"%s\",\"lat\":%.6f,\"lon\":%.6f,\"timestamp\":%lu}",
-                DEVICE_ID, lat, lon, millis());
-        
-        // Send TCP data
-        if (gprs.sendTCPData(tcpMessage)) {
-            Serial.println("TCP data sent successfully");
-        } else {
-            Serial.println("Failed to send TCP data");
-            // Try to reconnect
-            gprs.connectTCP(TCP_SERVER, TCP_PORT);
-        }
-        
-        lastSendTime = millis();
-    }
+    //keyReceiver.waitForInputUntil(KEY_ENTER); // Wait for ENTER key
+    keyReceiver.check_Key_and_Execute();
+    //bus.goToNextHalt();
+    //delay(10000);
+
 }
+
+
