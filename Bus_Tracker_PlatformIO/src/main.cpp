@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include "Config.h"
 #include "GPS.h"
-#include "GPRS.h"
+//#include "GPRS.h"
 #include "Key_Receiver.h"
 #include "Bus_Ticket_Printer.h"
 #include "Bus_Data.h"
@@ -10,11 +10,11 @@
 
 // Define hardware serial ports
 HardwareSerial gpsSerial(GPS_SERIAL_NUM);
-HardwareSerial gprsSerial(GPRS_SERIAL_NUM);
+//HardwareSerial gprsSerial(GPRS_SERIAL_NUM);
 
 // Create instances
 GPS gps(&gpsSerial, GPS_RX_PIN, GPS_TX_PIN);
-GPRS gprs(&gprsSerial, GPRS_RX_PIN, GPRS_TX_PIN);
+//GPRS gprs(&gprsSerial, GPRS_RX_PIN, GPRS_TX_PIN);
 KeyReceiver keyReceiver;
 BusTicketPrinter ticketPrinter;
 BusData bus;
@@ -86,28 +86,40 @@ void setup() {
     gpsSerial.begin(GPS_BAUD_RATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
     
     // Initialize GPRS serial
-    gprsSerial.begin(GPRS_BAUD_RATE, SERIAL_8N1, GPRS_RX_PIN, GPRS_TX_PIN);
+    //gprsSerial.begin(GPRS_BAUD_RATE, SERIAL_8N1, GPRS_RX_PIN, GPRS_TX_PIN);
 
     keyReceiver.begin();
 
     gpsTicker.attach(1.0, updateGPS);   // every 2 seconds
     timeTicker.attach(1.0, updateTime); // every 5 seconds
-    sendTicker.attach(0.10, []() {
+    sendTicker.attach(2.0, []() {
         // Send GPS data to server
         char tcpMessage[TCP_MESSAGE_BUFFER_SIZE];
         snprintf(tcpMessage, sizeof(tcpMessage), 
-                "{\"id\":\"%s\",\"lat\":%.6f,\"lon\":%.6f,\"tim\":%s,\"txt\":\"%s, \"halt\":\"%s\"}",
-                DEVICE_ID, bus.latitude, bus.longitude, bus.time,keyReceiver.current_text.c_str(),bus.getCurrentHaltName());
+                "{\"id\":\"%s\",\"lat\":%.6f,\"lon\":%.6f,\"tim\":%s,\"txt\":\"%s, \"halt\":\"%s\",\"pass\":%d,\"dest\":\"%s\"}",
+                DEVICE_ID, bus.latitude, bus.longitude, bus.time, keyReceiver.current_text.c_str(),
+                bus.getCurrentHaltName(), bus.passengerCount, bus.getDestinationHaltName());
         Serial.println(tcpMessage);
     });
 
     ticketPrinter.begin();
+
+    // Print welcome message
+    Serial.println("\nBus Ticketing System Ready");
+    Serial.println("Key Functions:");
+    Serial.println("1-9: Select number of passengers");
+    Serial.println("A: Select destination halt");
+    Serial.println("B: View halt statistics");
+    Serial.println("C: Print ticket");
+    Serial.println("UP/DOWN: Navigate between halts");
+    Serial.println("Current Halt: " + String(bus.getCurrentHaltName()));
 
     ticketPrinter.setTicketData(
         "ND-2314", "Syntech Transit(Pvt) Ltd", "0012", "2025/03/21", "15:23",
         "10000000001", "Moratuwa - Nittambuwa", "Katubedda", "Kadawatha",
         true, 2, 260.00, "0703482664", "0332297800"
     );
+    
 
     // Serial.println("Ticket printing Test.");
     // ticketPrinter.printTicket();

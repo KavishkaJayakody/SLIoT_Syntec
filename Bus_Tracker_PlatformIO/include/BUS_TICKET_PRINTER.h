@@ -3,6 +3,7 @@
 
 #include <Arduino.h>
 #include "Adafruit_Thermal.h"
+#include "config.h"
 
 #define TX_PIN 18
 #define RX_PIN 19
@@ -10,10 +11,10 @@
 class BusTicketPrinter {
 public:
     BusTicketPrinter()
-        : serialPort(3), printer(&serialPort) {}
+        : serialPort(1), printer(&serialPort) {}
 
     void begin() {
-        serialPort.begin(9600, SERIAL_8N1, RX_PIN, TX_PIN);
+        serialPort.begin(9600, SERIAL_8N1, PRINTER_RX_PIN, PRINTER_TX_PIN);
         printer.begin();
     }
 

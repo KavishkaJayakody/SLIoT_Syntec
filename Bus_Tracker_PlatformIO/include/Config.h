@@ -6,7 +6,7 @@
 
 // Serial Port Configurations
 #define GPS_SERIAL_NUM 2    // UART2
-#define GPRS_SERIAL_NUM 1   // UART1
+#define PRINTER_SERIAL_NUM 1   // UART1
 #define DEBUG_BAUD_RATE 115200
 #define GPS_BAUD_RATE 9600
 #define GPRS_BAUD_RATE 38400
@@ -16,8 +16,8 @@
 #define GPS_TX_PIN GPIO_NUM_17
 
 // GPRS Pin Configuration
-#define GPRS_RX_PIN GPIO_NUM_4
-#define GPRS_TX_PIN GPIO_NUM_5
+#define PRINTER_RX_PIN GPIO_NUM_5
+#define PRINTER_TX_PIN GPIO_NUM_4
 
 // Keypad Pin Configuration
 const uint8_t KEYPAD_ROW_PINS[4] = {13, 12, 14, 27};

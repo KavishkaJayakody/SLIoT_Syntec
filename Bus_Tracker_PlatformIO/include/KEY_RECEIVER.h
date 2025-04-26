@@ -4,6 +4,11 @@
 #include <Arduino.h>
 //#include "driver/gpio.h"  // Needed for gpio_install_isr_service
 #include "Bus_Data.h"
+#include "Bus_Ticket_Printer.h"
+
+// Forward declarations
+extern BusData bus;
+extern BusTicketPrinter ticketPrinter;
 
 enum Key{
     NONE,   KEY_A       ,KEY_B      ,KEY_C      ,KEY_D      ,KEY_E  ,
@@ -13,6 +18,13 @@ enum Key{
             KEY_LEFT    ,KEY_DOWN   ,KEY_RIGHT  ,KEY_0      ,KEY_ENTER
 };
 
+enum class SystemState {
+    IDLE,
+    SELECTING_PASSENGERS,
+    SELECTING_DESTINATION,
+    PRINTING_TICKET,
+    SHOWING_STATS
+};
 
 class KeyReceiver {
 public:
@@ -24,7 +36,8 @@ public:
     String current_text = "";
     String last_text = "";
     String last_key = "";
-
+    SystemState currentState = SystemState::IDLE;
+    String tempInput = "";
 
     KeyReceiver() {
         for (int i = 0; i < NUM_DATA_PINS; i++) {
@@ -97,34 +110,40 @@ public:
         }
     }
 
-
     void check_Key_and_Execute() {
-        if (dataReady) {
-            dataReady = false;
-
-            int value = 0;
-            for (int i = 0; i < NUM_DATA_PINS; i++) {
-                value |= (digitalRead(DATA_PINS[i]) << i);
-            }
-            Serial.print("Received Key: ");
-            Serial.println(value);
-            switch (value){
-                case(KEY_UP):
-                    bus.goToNextHalt();
-                    Serial.println("Next Halt: ");
-                    break;
-            
-                case(KEY_DOWN):
-                    bus.goToPreviousHalt();
-                    Serial.println("Previous Halt: ");
-                    break;
-            }
-            
-
+        if (!dataReady) return;
         
+        dataReady = false;
+        int value = 0;
+        for (int i = 0; i < NUM_DATA_PINS; i++) {
+            value |= (digitalRead(DATA_PINS[i]) << i);
         }
-        
+        Serial.print("Received Key: ");
+        Serial.println(value);
+
+        switch (currentState) {
+            case SystemState::IDLE:
+                handleIdleState(value);
+                break;
+                
+            case SystemState::SELECTING_DESTINATION:
+                handleDestinationSelection(value);
+                break;
+                
+            case SystemState::SELECTING_PASSENGERS:
+                handlePassengerSelection(value);
+                break;
+                
+            case SystemState::PRINTING_TICKET:
+                handleTicketPrinting(value);
+                break;
+                
+            case SystemState::SHOWING_STATS:
+                handleStatsDisplay(value);
+                break;
+        }
     }
+
     int check_Key() {
         if (dataReady) {
             dataReady = false;
@@ -141,8 +160,8 @@ public:
         else {
             return NONE;  // Return NONE if no key is pressed
         }
-        
     }
+
     const char* getKeyName(int value) {
         switch (value) {
             case KEY_A: return "A";
@@ -175,6 +194,119 @@ public:
 
 private:
     static KeyReceiver* instance;
+
+    void handleIdleState(int value) {
+        switch (value) {
+            case KEY_UP:
+                bus.goToNextHalt();
+                Serial.println("Next Halt: " + String(bus.getCurrentHaltName()));
+                break;
+                
+            case KEY_DOWN:
+                bus.goToPreviousHalt();
+                Serial.println("Previous Halt: " + String(bus.getCurrentHaltName()));
+                break;
+                
+            case KEY_A:
+                Serial.println("Enter destination halt number (1-9):");
+                currentState = SystemState::SELECTING_DESTINATION;
+                tempInput = "";
+                break;
+                
+            case KEY_B:
+                bus.printHaltStats();
+                currentState = SystemState::SHOWING_STATS;
+                break;
+                
+            case KEY_C:
+                if (bus.passengerCount > 0) {
+                    currentState = SystemState::PRINTING_TICKET;
+                    printTicket();
+                } else {
+                    Serial.println("No passengers selected");
+                }
+                break;
+                
+            default:
+
+            
+                String key = getKeyName(value);
+                if (key.toInt() >= 1 && key.toInt() <=9) {
+                    bus.issueTicket(key.toInt());
+                    Serial.printf("Issued %d tickets\n", key.toInt());
+                    
+                }
+
+                break;
+        }
+    }
+
+    void handleDestinationSelection(int value) {
+        if (value == KEY_ENTER) {
+            int destIndex = tempInput.toInt() - 1;
+            if (destIndex >= 0 && destIndex < BusData::NUM_HALTS) {
+                bus.setDestinationHalt(destIndex);
+                Serial.printf("Destination set to: %s\n", bus.getDestinationHaltName());
+            }
+            currentState = SystemState::IDLE;
+        } else {
+            String key = getKeyName(value);
+            if (key.toInt() >= 1 && key.toInt() <=9) {
+            tempInput += key;
+            Serial.println("Destination: " + tempInput);
+        }
+        }
+    }
+
+    void handlePassengerSelection(int value) {
+        if (value == KEY_ENTER) {
+            int count = tempInput.toInt();
+            if (count > 0) {
+                bus.issueTicket(count);
+                Serial.printf("Issued %d tickets\n", count);
+            }
+            currentState = SystemState::IDLE;
+        } else {
+            String key = getKeyName(value);
+            if (key.toInt() >= 1 && key.toInt() <=9) {
+            tempInput += key;
+            Serial.println("Passengers: " + tempInput);
+        }
+        }
+    }
+
+    void handleTicketPrinting(int value) {
+        if (value == KEY_ENTER) {
+            currentState = SystemState::IDLE;
+        }
+    }
+
+    void handleStatsDisplay(int value) {
+        if (value == KEY_ENTER) {
+            currentState = SystemState::IDLE;
+        }
+    }
+
+    void printTicket() {
+        ticketPrinter.setTicketData(
+            bus.registrationNumber,
+            bus.companyName,
+            bus.routeNumber,
+            bus.date,
+            bus.time,
+            bus.referenceNumber,
+            bus.routeName,
+            bus.getCurrentHaltName(),
+            bus.getDestinationHaltName(),
+            bus.isFullTicket,
+            bus.passengerCount,
+            bus.unitPrice * bus.passengerCount,
+            bus.driverPhone,
+            bus.hotline
+        );
+        ticketPrinter.printTicket();
+        Serial.println("Ticket printed successfully");
+    }
 
     static void isrWrapper() {
         if (instance) {
