@@ -16,18 +16,18 @@ public:
     String referenceNumber;
 
     // Travel Info
-    String routeName;
-    String fromHalt;
-    String toHalt;
-    bool isFullTicket;
+    String routeName = "255";
+    String fromHalt = "PILIYANDALA";
+    String toHalt = "GALKISSA";
+    bool isFullTicket = true;
 
     // Date & Time
     String date;
     String time;
 
     // Ticket Info
-    uint8_t ticketCount = 0;
-    float unitPrice = 0.0f;
+    uint8_t ticketCount = 1;
+    float unitPrice = 100.0f;
 
     // Contact Info
     String driverPhone;

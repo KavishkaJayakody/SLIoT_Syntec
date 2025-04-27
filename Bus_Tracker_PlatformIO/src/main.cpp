@@ -7,7 +7,7 @@
 #include "Bus_Display.h"
 #include "Firebase_Connector.h"
 #include "TimeManager.h"
-#include "BusPreferences.h" // Add BusPreferences header
+#include "BusPreferences.h"
 #include <Ticker.h>
 
 // Define hardware serial ports
@@ -21,9 +21,9 @@ BusDisplay display;
 BusData bus;
 FirebaseConnector firebase;
 TimeManager timeManager;
-BusPreferences preferences; // Add BusPreferences instance
+BusPreferences preferences;
 
-// Ticker objects for remaining timers
+// Ticker objects for timers
 Ticker gpsTicker;
 Ticker displayTicker;
 Ticker timeManagerTicker;
@@ -40,8 +40,14 @@ void sendToFirebase();
 void setup() {
     // Initialize debug serial first at high baud rate
     Serial.begin(115200);
-    delay(1000); // Stabilization delay
     Serial.println("\n\nESP32 Bus System Starting");
+
+    pinMode(BUZZER_PIN, OUTPUT);
+  
+    tone(BUZZER_PIN, 2000);
+    delay(1000);
+    noTone(BUZZER_PIN);
+  
     
     // Initialize bus preferences first to load saved values
     Serial.println("Initializing preferences...");
@@ -134,19 +140,19 @@ void setup() {
         Serial.println("Firebase connection failed, will retry later");
     }
     
-    // Set up display data after UI is created
+    // Set up display data
     display.setLocation(bus.fromHalt.c_str());
     
     // Set up tickers
     Serial.println("Setting up tickers...");
-    displayTicker.attach_ms(5, updateDisplay); // 200 Hz refresh rate
-    gpsTicker.attach(1.0, updateGPS);     // Update GPS every second
-    timeManagerTicker.attach(1.0, updateTime);   // Update time every second
+    displayTicker.attach_ms(20, updateDisplay);  // 200 Hz refresh rate
+    gpsTicker.attach(1.0, updateGPS);           // Update GPS every second
+    timeManagerTicker.attach(1.0, updateTime);  // Update time every second
     
     // Initialize the previous millis for Firebase timing
     previousFirebaseMillis = millis();
 
-    // Set ticket printer data using the new method with BusData and TimeManager
+    // Set ticket printer data using the method with BusData and TimeManager
     ticketPrinter.setTicketDataFromBus(bus, timeManager);
 
     Serial.println("Bus Ticketing System Ready");
@@ -156,6 +162,7 @@ void updateGPS() {
     gps.update();  // Parse new GPS data
     bus.latitude = gps.getLatitude();
     bus.longitude = gps.getLongitude();
+    bus.speed = gps.getSpeedKmh();
 }
 
 void updateTime() {
@@ -173,7 +180,7 @@ void updateTime() {
         timeManager.getSecond()
     );
     
-    // Update date on display only if it has changed (to avoid unnecessary updates)
+    // Update date on display only if it has changed
     static int lastDay = -1;
     int currentDay = timeManager.getDay();
     
@@ -188,51 +195,21 @@ void updateTime() {
     }
 }
 
-// Function to update display, called by ticker
 void updateDisplay() {
     display.update();
     display.setLocation(bus.getCurrentHaltName());
 }
 
-// This function will be called when a ticket needs to be printed
-// It should be called from your button press handler
-void printBusTicket() {
-    // Update reference number for this ticket
-    bus.referenceNumber = preferences.incrementReferenceNumber();
-    
-    // Update the ticket data with latest information
-    ticketPrinter.setTicketDataFromBus(bus, timeManager);
-    
-    // Print the ticket
-    ticketPrinter.printTicket();
-    
-    // Update the bus statistics
-    bus.issueTicket(bus.ticketCount);
-    
-    // Save the updated reference number
-    preferences.saveReferenceNumber(bus.referenceNumber);
-    
-    // For debugging
-    Serial.println("Ticket printed with ref: " + bus.referenceNumber);
-    bus.printHaltStats();
-}
-
-// Print halt statistics report
-void printHaltStats() {
-    ticketPrinter.printHaltStats(bus, timeManager);
-    Serial.println("Halt statistics printed");
-}
-
-// Function to send data to Firebase, now called from loop()
+// Function to send data to Firebase
 void sendToFirebase() {
     // Only send data if Firebase is initialized correctly
     if (firebase.isConnected()) {
         firebase.sendBusData(
             DEVICE_ID,
-            bus.latitude = gps.getLatitude(),
-            bus.longitude = gps.getLongitude(),
-            bus.speed = gps.getSpeedKmh(),
-            bus.time,  // Uses the time from TimeManager
+            bus.latitude,
+            bus.longitude,
+            bus.speed,
+            bus.time,
             bus.getCurrentHaltName(),
             bus.passengerCount,
             bus.getDestinationHaltName()
@@ -244,7 +221,7 @@ void sendToFirebase() {
 }
 
 void loop() {
-    // Handle key inputs
+    // Handle key inputs with the state machine
     keyReceiver.check_Key_and_Execute();
     
     // Check if it's time to send data to Firebase
@@ -253,7 +230,4 @@ void loop() {
         previousFirebaseMillis = currentMillis;
         sendToFirebase();
     }
-    
-    // Very small delay to allow ESP32 to handle background tasks
-    delay(1);
 }

@@ -7,9 +7,6 @@
 #include "Bus_Data.h"
 #include "TimeManager.h"
 
-#define PRINTER_TX_PIN 18
-#define PRINTER_RX_PIN 19
-
 class BusTicketPrinter {
 public:
     BusTicketPrinter()

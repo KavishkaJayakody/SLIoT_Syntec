@@ -198,7 +198,7 @@
  C:/Users/META/.platformio/packages/framework-arduinoespressif32/libraries/WiFi/src/WiFiUdp.h \
  C:/Users/META/.platformio/packages/framework-arduinoespressif32/cores/esp32/Udp.h \
  C:/Users/META/.platformio/packages/framework-arduinoespressif32/cores/esp32/cbuf.h \
- include/Bus_Ticket_Printer.h include/Bus_Data.h include/Bus_Display.h \
+ include/BUS_DISPLAY.h \
  .pio/libdeps/esp32doit-devkit-v1/TFT_eSPI/TFT_eSPI.h \
  C:/Users/META/.platformio/packages/framework-arduinoespressif32/libraries/SPI/src/SPI.h \
  C:/Users/META/.platformio/packages/framework-arduinoespressif32/cores/esp32/esp32-hal-spi.h \
@@ -522,7 +522,8 @@
  .pio/libdeps/esp32doit-devkit-v1/lvgl/src/extra/widgets/imgbtn/../../../lvgl.h \
  .pio/libdeps/esp32doit-devkit-v1/lvgl/src/extra/widgets/span/lv_span.h \
  .pio/libdeps/esp32doit-devkit-v1/lvgl/src/extra/widgets/span/../../../lvgl.h \
- include/Config.h include/Firebase_Connector.h \
+ include/Config.h include/Bus_Ticket_Printer.h include/Bus_Data.h \
+ include/Bus_Display.h include/Firebase_Connector.h \
  .pio/libdeps/esp32doit-devkit-v1/Firebase\ Arduino\ Client\ Library\ for\ ESP8266\ and\ ESP32/src/Firebase_ESP_Client.h \
  .pio/libdeps/esp32doit-devkit-v1/Firebase\ Arduino\ Client\ Library\ for\ ESP8266\ and\ ESP32/src/Firebase.h \
  .pio/libdeps/esp32doit-devkit-v1/Firebase\ Arduino\ Client\ Library\ for\ ESP8266\ and\ ESP32/src/./core/Firebase_Client_Version.h \
