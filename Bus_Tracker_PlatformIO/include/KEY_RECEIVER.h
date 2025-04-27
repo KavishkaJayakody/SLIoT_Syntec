@@ -17,10 +17,10 @@ enum Key {
     KEY_CHG,   // Change
     KEY_STBY,  // Standby
     KEY_ON,    // On
-    KEY_PRT,   // Print ticket
+    KEY_MENU,   // Go to menu
     KEY_F2,    // Function 2 / show stats
     KEY_1, KEY_2, KEY_3,
-    KEY_RT,    // Select route
+    KEY_PRT,    // Print ticket
     KEY_F3,    // Function 3
     KEY_4, KEY_5, KEY_6,
     KEY_F4,    // Function 4
@@ -105,12 +105,12 @@ public:
             case KEY_CHG:   return "KEY_CHG";
             case KEY_STBY:  return "KEY_STBY";
             case KEY_ON:    return "KEY_ON";
-            case KEY_PRT:   return "KEY_PRT";
+            case KEY_MENU:   return "KEY_PRT";
             case KEY_F2:    return "KEY_F2";
             case KEY_1:     return "KEY_1";
             case KEY_2:     return "KEY_2";
             case KEY_3:     return "KEY_3";
-            case KEY_RT:    return "KEY_RT";
+            case KEY_PRT:    return "KEY_RT";
             case KEY_F3:    return "KEY_F3";
             case KEY_4:     return "KEY_4";
             case KEY_5:     return "KEY_5";
@@ -153,7 +153,7 @@ private:
                 Serial.println("Previous Halt: " + String(bus.getCurrentHaltName()));
                 break;
 
-            case KEY_RT:
+            case KEY_PRT:
                 Serial.println("Enter destination halt number (1-9):");
                 currentState = SystemState::SELECTING_DESTINATION;
                 tempInput = "";
@@ -164,7 +164,7 @@ private:
                 currentState = SystemState::SHOWING_STATS;
                 break;
 
-            case KEY_PRT:
+            case KEY_MENU:
                 if (bus.passengerCount > 0) {
                     printTicket();
                     currentState = SystemState::IDLE;
