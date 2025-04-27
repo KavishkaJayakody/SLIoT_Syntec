@@ -180,11 +180,11 @@ void Adafruit_Thermal::begin(uint16_t version) {
   setHeatConfig();
 
   // Enable DTR pin if requested
-  if (dtrPin < 255) {
-    pinMode(dtrPin, INPUT_PULLUP);
-    writeBytes(ASCII_GS, 'a', (1 << 5));
-    dtrEnabled = true;
-  }
+  // if (dtrPin < 255) {
+  //   pinMode(dtrPin, INPUT_PULLUP);
+  //   writeBytes(ASCII_GS, 'a', (1 << 5));
+  //   dtrEnabled = true;
+  // }
 
   dotPrintTime = 30000; // See comments near top of file for
   dotFeedTime = 2100;   // an explanation of these values.

@@ -2,25 +2,39 @@
 #define KEY_RECEIVER_H
 
 #include <Arduino.h>
-//#include "driver/gpio.h"  // Needed for gpio_install_isr_service
 #include "Bus_Data.h"
 #include "Bus_Ticket_Printer.h"
 
-// Forward declarations
+// External objects defined in main.cpp
 extern BusData bus;
 extern BusTicketPrinter ticketPrinter;
 
-enum Key{
-    NONE,   KEY_A       ,KEY_B      ,KEY_C      ,KEY_D      ,KEY_E  ,
-            KEY_F       ,KEY_G      ,KEY_1      ,KEY_2      ,KEY_3  ,
-            KEY_H       ,KEY_I      ,KEY_4      ,KEY_5      ,KEY_6 ,
-            KEY_J       ,KEY_UP     ,KEY_7      ,KEY_8      ,KEY_9 ,
-            KEY_LEFT    ,KEY_DOWN   ,KEY_RIGHT  ,KEY_0      ,KEY_ENTER
+// 5-bit keypad codes
+enum Key {
+    NONE,
+    KEY_ESC,   // Escape / cancel
+    KEY_F1,    // Function 1
+    KEY_CHG,   // Change
+    KEY_STBY,  // Standby
+    KEY_ON,    // On
+    KEY_PRT,   // Print ticket
+    KEY_F2,    // Function 2 / show stats
+    KEY_1, KEY_2, KEY_3,
+    KEY_RT,    // Select route
+    KEY_F3,    // Function 3
+    KEY_4, KEY_5, KEY_6,
+    KEY_F4,    // Function 4
+    KEY_UP,    // Next halt
+    KEY_7, KEY_8, KEY_9,
+    KEY_LEFT,  // Navigate left
+    KEY_DOWN,  // Previous halt
+    KEY_RIGHT, // Navigate right
+    KEY_0,
+    KEY_ENTER // Confirm / Enter
 };
 
 enum class SystemState {
     IDLE,
-    SELECTING_PASSENGERS,
     SELECTING_DESTINATION,
     PRINTING_TICKET,
     SHOWING_STATS
@@ -29,261 +43,164 @@ enum class SystemState {
 class KeyReceiver {
 public:
     static const int NUM_DATA_PINS = 5;
-    const int DATA_PINS[NUM_DATA_PINS] = {21, 34, 35, 33, 32};  // Match with Pro Mini's A0–A4
-    const int INTERRUPT_PIN = 19;  // Connected to Pro Mini's SIGNAL_PIN
+    const int DATA_PINS[NUM_DATA_PINS] = {21, 34, 35, 33, 32};
+    const int INTERRUPT_PIN       = 19;
 
-    volatile bool dataReady = false;
-    String current_text = "";
-    String last_text = "";
-    String last_key = "";
-    SystemState currentState = SystemState::IDLE;
-    String tempInput = "";
+    volatile bool dataReady      = false;
+    SystemState currentState     = SystemState::IDLE;
+    String tempInput             = "";
 
     KeyReceiver() {
         for (int i = 0; i < NUM_DATA_PINS; i++) {
             pinMode(DATA_PINS[i], INPUT_PULLDOWN);
         }
         pinMode(INTERRUPT_PIN, INPUT_PULLDOWN);
-
-      instance = this;
+        instance = this;
     }
 
     void begin() {
-        Serial.begin(115200);
-        Serial.println("ESP32 Receiver Ready");
-
-        // Ensure ISR service is installed
+        // Install ISR service once
         if (gpio_install_isr_service(ESP_INTR_FLAG_LOWMED) != ESP_OK) {
             Serial.println("GPIO ISR service already installed or failed.");
         }
-
-        attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN), isrWrapper, RISING);
-    }
-
-    String waitForInputUntil(int endKey = KEY_ENTER) {
-        String inputText = "";
-    
-        //Serial.println("Waiting for input...");
-    
-        while (true) {
-            //checkAndPrintKey();  // Optional: still prints to Serial
-    
-            if (dataReady) {
-                dataReady = false;
-    
-                int value = 0;
-                for (int i = 0; i < NUM_DATA_PINS; i++) {
-                    value |= (digitalRead(DATA_PINS[i]) << i);
-                }
-    
-                if (value == endKey) {
-                    //Serial.println("End key received.");
-                    last_text = current_text;
-                    current_text = "";
-                    break;
-                } else {
-                    String c = getKeyName(value);  // Optional: simple ASCII mapping
-                    inputText += c;
-                    current_text = inputText;  // Update current_text with the new input
-                    Serial.print("Appended char: ");
-                    Serial.println(c);
-                }
-            }
-    
-            delay(10);  // Small delay to avoid hogging CPU
-        }
-    
-        return inputText;
-    }
-
-    void checkAndPrintKey() {
-        if (dataReady) {
-            dataReady = false;
-
-            int value = 0;
-            for (int i = 0; i < NUM_DATA_PINS; i++) {
-                value |= (digitalRead(DATA_PINS[i]) << i);
-            }
-
-            Serial.print("Received Key: ");
-            Serial.println(value);
-        }
+        attachInterrupt(digitalPinToInterrupt(INTERRUPT_PIN),
+                        isrWrapper, RISING);
     }
 
     void check_Key_and_Execute() {
         if (!dataReady) return;
-        
         dataReady = false;
-        int value = 0;
+
+        int code = 0;
         for (int i = 0; i < NUM_DATA_PINS; i++) {
-            value |= (digitalRead(DATA_PINS[i]) << i);
+            code |= (digitalRead(DATA_PINS[i]) << i);
         }
+        // Print the enum name instead of numeric value
         Serial.print("Received Key: ");
-        Serial.println(value);
+        Serial.println(getKeyName(code));
 
         switch (currentState) {
             case SystemState::IDLE:
-                handleIdleState(value);
+                handleIdleState(code);
                 break;
-                
+
             case SystemState::SELECTING_DESTINATION:
-                handleDestinationSelection(value);
+                handleDestinationSelection(code);
                 break;
-                
-            case SystemState::SELECTING_PASSENGERS:
-                handlePassengerSelection(value);
-                break;
-                
+
             case SystemState::PRINTING_TICKET:
-                handleTicketPrinting(value);
+                if (code == KEY_ENTER) currentState = SystemState::IDLE;
                 break;
-                
+
             case SystemState::SHOWING_STATS:
-                handleStatsDisplay(value);
+                if (code == KEY_ENTER) currentState = SystemState::IDLE;
                 break;
         }
     }
 
-    int check_Key() {
-        if (dataReady) {
-            dataReady = false;
-
-            int value = 0;
-            for (int i = 0; i < NUM_DATA_PINS; i++) {
-                value |= (digitalRead(DATA_PINS[i]) << i);
-            }
-
-            //Serial.print("Received Key: ");
-            Serial.println(value);
-            return value;
-        }
-        else {
-            return NONE;  // Return NONE if no key is pressed
-        }
-    }
-
-    const char* getKeyName(int value) {
-        switch (value) {
-            case KEY_A: return "A";
-            case KEY_B: return "B";
-            case KEY_C: return "C";
-            case KEY_D: return "D";
-            case KEY_E: return "E";
-            case KEY_F: return "F";
-            case KEY_G: return "G";
-            case KEY_H: return "H";
-            case KEY_UP: return "^";
-            case KEY_DOWN: return "-";
-            case KEY_LEFT: return "<";
-            case KEY_RIGHT: return ">";
-            case KEY_0: return "0";
-            case KEY_1: return "1";
-            case KEY_2: return "2";
-            case KEY_3: return "3";
-            case KEY_4: return "4";
-            case KEY_5: return "5";
-            case KEY_6: return "6";
-            case KEY_7: return "7";
-            case KEY_8: return "8";
-            case KEY_9: return "9";
-            case KEY_ENTER: return "/";
-            default: return "!";
+    const char* getKeyName(int code) {
+        switch (code) {
+            case KEY_ESC:   return "KEY_ESC";
+            case KEY_F1:    return "KEY_F1";
+            case KEY_CHG:   return "KEY_CHG";
+            case KEY_STBY:  return "KEY_STBY";
+            case KEY_ON:    return "KEY_ON";
+            case KEY_PRT:   return "KEY_PRT";
+            case KEY_F2:    return "KEY_F2";
+            case KEY_1:     return "KEY_1";
+            case KEY_2:     return "KEY_2";
+            case KEY_3:     return "KEY_3";
+            case KEY_RT:    return "KEY_RT";
+            case KEY_F3:    return "KEY_F3";
+            case KEY_4:     return "KEY_4";
+            case KEY_5:     return "KEY_5";
+            case KEY_6:     return "KEY_6";
+            case KEY_F4:    return "KEY_F4";
+            case KEY_UP:    return "KEY_UP";
+            case KEY_7:     return "KEY_7";
+            case KEY_8:     return "KEY_8";
+            case KEY_9:     return "KEY_9";
+            case KEY_LEFT:  return "KEY_LEFT";
+            case KEY_DOWN:  return "KEY_DOWN";
+            case KEY_RIGHT: return "KEY_RIGHT";
+            case KEY_0:     return "KEY_0";
+            case KEY_ENTER: return "KEY_ENTER";
+            default:        return "NONE";
         }
     }
-    
 
 private:
     static KeyReceiver* instance;
 
-    void handleIdleState(int value) {
-        switch (value) {
+    // ISR wrapper now in flash (no IRAM_ATTR) to avoid relocation errors
+    static void isrWrapper() {
+        if (instance) instance->onInterrupt();
+    }
+
+    void onInterrupt() {
+        dataReady = true;
+    }
+
+    void handleIdleState(int code) {
+        switch (code) {
             case KEY_UP:
                 bus.goToNextHalt();
                 Serial.println("Next Halt: " + String(bus.getCurrentHaltName()));
                 break;
-                
+
             case KEY_DOWN:
                 bus.goToPreviousHalt();
                 Serial.println("Previous Halt: " + String(bus.getCurrentHaltName()));
                 break;
-                
-            case KEY_A:
+
+            case KEY_RT:
                 Serial.println("Enter destination halt number (1-9):");
                 currentState = SystemState::SELECTING_DESTINATION;
                 tempInput = "";
                 break;
-                
-            case KEY_B:
+
+            case KEY_F2:
                 bus.printHaltStats();
                 currentState = SystemState::SHOWING_STATS;
                 break;
-                
-            case KEY_C:
+
+            case KEY_PRT:
                 if (bus.passengerCount > 0) {
-                    currentState = SystemState::PRINTING_TICKET;
                     printTicket();
+                    currentState = SystemState::IDLE;
                 } else {
                     Serial.println("No passengers selected");
                 }
                 break;
-                
+
+            case KEY_ESC:
+                currentState = SystemState::IDLE;
+                Serial.println("Cancelled, back to idle");
+                break;
+
             default:
-
-            
-                String key = getKeyName(value);
-                if (key.toInt() >= 1 && key.toInt() <=9) {
-                    bus.issueTicket(key.toInt());
-                    Serial.printf("Issued %d tickets\n", key.toInt());
-                    
+                // Direct ticket issue on numeric keys 1–9
+                if (code >= KEY_1 && code <= KEY_9) {
+                    int cnt = code - KEY_0;
+                    bus.issueTicket(cnt);
+                    Serial.printf("Issued %d tickets\n", cnt);
                 }
-
                 break;
         }
     }
 
-    void handleDestinationSelection(int value) {
-        if (value == KEY_ENTER) {
-            int destIndex = tempInput.toInt() - 1;
-            if (destIndex >= 0 && destIndex < BusData::NUM_HALTS) {
-                bus.setDestinationHalt(destIndex);
-                Serial.printf("Destination set to: %s\n", bus.getDestinationHaltName());
+    void handleDestinationSelection(int code) {
+        if (code == KEY_ENTER) {
+            int idx = tempInput.toInt() - 1;
+            if (idx >= 0 && idx < BusData::NUM_HALTS) {
+                bus.setDestinationHalt(idx);
+                Serial.println("Destination: " + String(bus.getDestinationHaltName()));
             }
             currentState = SystemState::IDLE;
-        } else {
-            String key = getKeyName(value);
-            if (key.toInt() >= 1 && key.toInt() <=9) {
-            tempInput += key;
-            Serial.println("Destination: " + tempInput);
         }
-        }
-    }
-
-    void handlePassengerSelection(int value) {
-        if (value == KEY_ENTER) {
-            int count = tempInput.toInt();
-            if (count > 0) {
-                bus.issueTicket(count);
-                Serial.printf("Issued %d tickets\n", count);
-            }
-            currentState = SystemState::IDLE;
-        } else {
-            String key = getKeyName(value);
-            if (key.toInt() >= 1 && key.toInt() <=9) {
-            tempInput += key;
-            Serial.println("Passengers: " + tempInput);
-        }
-        }
-    }
-
-    void handleTicketPrinting(int value) {
-        if (value == KEY_ENTER) {
-            currentState = SystemState::IDLE;
-        }
-    }
-
-    void handleStatsDisplay(int value) {
-        if (value == KEY_ENTER) {
-            currentState = SystemState::IDLE;
+        else if (code >= KEY_1 && code <= KEY_9) {
+            tempInput += getKeyName(code);
+            Serial.println("Selecting: " + tempInput);
         }
     }
 
@@ -305,22 +222,11 @@ private:
             bus.hotline
         );
         ticketPrinter.printTicket();
-        Serial.println("Ticket printed successfully");
-    }
-
-    static void isrWrapper() {
-        if (instance) {
-            instance->onInterrupt();
-        }
-    }
-
-    void onInterrupt() {
-        dataReady = true;
+        Serial.println("Ticket printed");
     }
 };
 
-// Define the static member
-extern KeyReceiver* keyReceiverInstance;
+// Define static instance
 KeyReceiver* KeyReceiver::instance = nullptr;
 
 #endif // KEY_RECEIVER_H

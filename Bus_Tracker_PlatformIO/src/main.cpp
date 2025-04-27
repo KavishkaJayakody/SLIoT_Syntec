@@ -5,6 +5,9 @@
 #include "Bus_Ticket_Printer.h"
 #include "Bus_Data.h"
 #include "Bus_Display.h"
+#include "Firebase_Connector.h"
+#include "TimeManager.h"
+#include "BusPreferences.h" // Add BusPreferences header
 #include <Ticker.h>
 
 // Define hardware serial ports
@@ -16,12 +19,138 @@ KeyReceiver keyReceiver;
 BusTicketPrinter ticketPrinter;
 BusDisplay display;
 BusData bus;
+FirebaseConnector firebase;
+TimeManager timeManager;
+BusPreferences preferences; // Add BusPreferences instance
 
-// Ticker objects
+// Ticker objects for remaining timers
 Ticker gpsTicker;
-Ticker timeTicker;
-Ticker sendTicker;
 Ticker displayTicker;
+Ticker timeManagerTicker;
+
+// Firebase timing using millis() instead of ticker
+unsigned long previousFirebaseMillis = 0;
+
+// Forward declarations
+void updateGPS();
+void updateTime();
+void updateDisplay();
+void sendToFirebase();
+
+void setup() {
+    // Initialize debug serial first at high baud rate
+    Serial.begin(115200);
+    delay(1000); // Stabilization delay
+    Serial.println("\n\nESP32 Bus System Starting");
+    
+    // Initialize bus preferences first to load saved values
+    Serial.println("Initializing preferences...");
+    if (preferences.begin()) {
+        Serial.println("Preferences initialized successfully");
+        // Load saved bus data
+        if (preferences.loadBusData(bus)) {
+            Serial.println("Loaded saved bus data from preferences");
+        } else {
+            Serial.println("No saved data found, using defaults");
+            
+            // Set default bus data if no saved data is found
+            bus.registrationNumber = "ND-2314";
+            bus.companyName = "Syntech Transit (Pvt) Ltd";
+            bus.routeNumber = "0012";
+            
+            // Get a new reference number or start with default
+            bus.referenceNumber = preferences.loadReferenceNumber();
+            if (bus.referenceNumber.isEmpty()) {
+                bus.referenceNumber = "10000000001";
+                preferences.saveReferenceNumber(bus.referenceNumber);
+            }
+          
+            bus.routeName = "Moratuwa - Nittambuwa";
+            bus.fromHalt = "Katubedda";
+            bus.toHalt = "Kadawatha";
+            bus.isFullTicket = true;
+            bus.ticketCount = 2;
+            bus.unitPrice = 130.00;
+          
+            bus.driverPhone = "0703482664";
+            bus.hotline = "0332297800";
+            
+            // Save these default values
+            preferences.saveBusData(bus);
+        }
+    } else {
+        Serial.println("Preferences initialization failed, using default values");
+        
+        // Default bus data when preferences fails
+        bus.registrationNumber = "ND-2314";
+        bus.companyName = "Syntech Transit (Pvt) Ltd";
+        bus.routeNumber = "0012";
+        bus.referenceNumber = "10000000001";
+        
+        bus.routeName = "Moratuwa - Nittambuwa";
+        bus.fromHalt = "Katubedda";
+        bus.toHalt = "Kadawatha";
+        bus.isFullTicket = true;
+        
+        bus.ticketCount = 2;
+        bus.unitPrice = 130.00;
+        
+        bus.driverPhone = "0703482664";
+        bus.hotline = "0332297800";
+    }
+    
+    // Set default date and time values that will be updated by TimeManager
+    bus.date = "2025/03/21";
+    bus.time = "00:00:00";
+    
+    Serial.println("Initializing display...");
+    // Initialize components - start with display
+    display.begin();
+    delay(100); // Give the display time to initialize
+    
+    // Initialize time manager
+    Serial.println("Initializing TimeManager...");
+    if (timeManager.begin()) {
+        Serial.println("TimeManager initialized successfully");
+        // Update time immediately after successful initialization
+        updateTime();
+    } else {
+        Serial.println("TimeManager initialization failed, using default time");
+    }
+    
+    // Now initialize other components
+    keyReceiver.begin();
+    ticketPrinter.begin();
+    
+    // Initialize GPS serial
+    Serial.println("Initializing GPS...");
+    gpsSerial.begin(GPS_BAUD_RATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+    
+    // Initialize Firebase
+    Serial.println("Initializing Firebase...");
+    if (firebase.begin()) {
+        Serial.println("Firebase connection successful");
+    } else {
+        Serial.println("Firebase connection failed, will retry later");
+    }
+    
+    // Set up display data after UI is created
+    display.setLocation(bus.fromHalt.c_str());
+    
+    // Set up tickers
+    Serial.println("Setting up tickers...");
+    displayTicker.attach_ms(5, updateDisplay); // 200 Hz refresh rate
+    gpsTicker.attach(1.0, updateGPS);     // Update GPS every second
+    timeManagerTicker.attach(1.0, updateTime);   // Update time every second
+    
+    // Initialize the previous millis for Firebase timing
+    previousFirebaseMillis = millis();
+
+    // Set ticket printer data using the new method with BusData and TimeManager
+    ticketPrinter.setTicketDataFromBus(bus, timeManager);
+
+    Serial.println("Bus Ticketing System Ready");
+}
 
 void updateGPS() {
     gps.update();  // Parse new GPS data
@@ -30,136 +159,101 @@ void updateGPS() {
 }
 
 void updateTime() {
-    int h, m, s;
-    if (sscanf(bus.time.c_str(), "%d:%d:%d", &h, &m, &s) == 3) {
-        s += 1;
-        if (s >= 60) {
-            m += s / 60;
-            s %= 60;
-        }
-        if (m >= 60) {
-            h += m / 60;
-            m %= 60;
-        }
-        if (h >= 24) {
-            h %= 24;
-        }
-
-        char timeBuffer[9];
-        snprintf(timeBuffer, sizeof(timeBuffer), "%02d:%02d:%02d", h, m, s);
-        bus.time = String(timeBuffer);
-        
-        // Update the time on the display as well
-        display.setTime(h, m, s);
-    } else {
-        Serial.println("Invalid time format in bus.time");
-    }
-}
-
-// LVGL update function for the ticker
-void updateDisplay() {
-    display.update();  // Call lv_timer_handler() inside
-}
-
-void setup() {
-    // Initialize bus data
-    bus.registrationNumber = "ND-2314";
-    bus.companyName = "Syntech Transit (Pvt) Ltd";
-    bus.routeNumber = "0012";
-    bus.referenceNumber = "10000000001";
-  
-    bus.routeName = "Moratuwa - Nittambuwa";
-    bus.fromHalt = "Katubedda";
-    bus.toHalt = "Kadawatha";
-    bus.isFullTicket = true;
-  
-    bus.date = "2025/03/21";
-    bus.time = "09:00:00";
-  
-    bus.ticketCount = 2;
-    bus.unitPrice = 130.00;
-  
-    bus.driverPhone = "0703482664";
-    bus.hotline = "0332297800";
-
-    // Initialize debug serial
-    Serial.begin(115200);
+    // Update time manager (checks if NTP sync is needed)
+    timeManager.update();
     
-    // Initialize GPS serial
-    gpsSerial.begin(GPS_BAUD_RATE, SERIAL_8N1, GPS_RX_PIN, GPS_TX_PIN);
+    // Get time from TimeManager
+    bus.time = timeManager.getTimeString();
+    bus.date = timeManager.getDateString();
     
-    // Initialize components
-    keyReceiver.begin();
-    ticketPrinter.begin();
-    display.begin();
-    
-    // Set the location on display
-    display.setLocation(bus.fromHalt.c_str());
-    
-    // Parse initial time and set display
-    int h, m, s;
-    if (sscanf(bus.time.c_str(), "%d:%d:%d", &h, &m, &s) == 3) {
-        display.setTime(h, m, s);
-    }
-    
-    // Set date on display (assuming a date format of YYYY/MM/DD)
-    int y, mo, d;
-    if (sscanf(bus.date.c_str(), "%d/%d/%d", &y, &mo, &d) == 3) {
-        // Calculate the day of week (simple algorithm, may not be accurate for all dates)
-        // This is just for demonstration - in a real app, use a proper calendar library
-        int weekday = (d + mo + y + (y/4)) % 7;
-        display.setDate(y, mo-1, d, weekday); // month-1 because our array is 0-indexed
-    }
-    
-    // Set up tickers
-    gpsTicker.attach(1.0, updateGPS);     // Update GPS every second
-    timeTicker.attach(1.0, updateTime);   // Update time every second
-    displayTicker.attach(0.02, updateDisplay); // Update LVGL at 50Hz
-    
-    sendTicker.attach(2.0, []() {
-        // Send GPS data to server
-        char tcpMessage[TCP_MESSAGE_BUFFER_SIZE];
-        snprintf(tcpMessage, sizeof(tcpMessage), 
-                "{\"id\":\"%s\",\"lat\":%.6f,\"lon\":%.6f,\"tim\":%s,\"txt\":\"%s, \"halt\":\"%s\",\"pass\":%d,\"dest\":\"%s\"}",
-                DEVICE_ID, bus.latitude, bus.longitude, bus.time.c_str(), keyReceiver.current_text.c_str(),
-                bus.getCurrentHaltName(), bus.passengerCount, bus.getDestinationHaltName());
-        Serial.println(tcpMessage);
-    });
-
-    // Set ticket printer data
-    ticketPrinter.setTicketData(
-        bus.registrationNumber,
-        bus.companyName,
-        bus.routeNumber,
-        bus.date,
-        bus.time,
-        bus.referenceNumber,
-        bus.routeName,
-        bus.fromHalt,
-        bus.toHalt,
-        bus.isFullTicket,
-        bus.ticketCount,
-        bus.unitPrice,
-        bus.driverPhone,
-        bus.hotline
+    // Update the time on the display
+    display.setTime(
+        timeManager.getHour(),
+        timeManager.getMinute(),
+        timeManager.getSecond()
     );
+    
+    // Update date on display only if it has changed (to avoid unnecessary updates)
+    static int lastDay = -1;
+    int currentDay = timeManager.getDay();
+    
+    if (currentDay != lastDay) {
+        display.setDate(
+            timeManager.getYear(),
+            timeManager.getMonth() - 1, // Display expects 0-based month
+            timeManager.getDay(),
+            timeManager.getDayOfWeek()
+        );
+        lastDay = currentDay;
+    }
+}
 
-    // Print welcome message
-    Serial.println("\nBus Ticketing System Ready");
-    Serial.println("Key Functions:");
-    Serial.println("1-9: Select number of passengers");
-    Serial.println("A: Select destination halt");
-    Serial.println("B: View halt statistics");
-    Serial.println("C: Print ticket");
-    Serial.println("UP/DOWN: Navigate between halts");
-    Serial.println("Current Halt: " + String(bus.getCurrentHaltName()));
+// Function to update display, called by ticker
+void updateDisplay() {
+    display.update();
+    display.setLocation(bus.getCurrentHaltName());
+}
+
+// This function will be called when a ticket needs to be printed
+// It should be called from your button press handler
+void printBusTicket() {
+    // Update reference number for this ticket
+    bus.referenceNumber = preferences.incrementReferenceNumber();
+    
+    // Update the ticket data with latest information
+    ticketPrinter.setTicketDataFromBus(bus, timeManager);
+    
+    // Print the ticket
+    ticketPrinter.printTicket();
+    
+    // Update the bus statistics
+    bus.issueTicket(bus.ticketCount);
+    
+    // Save the updated reference number
+    preferences.saveReferenceNumber(bus.referenceNumber);
+    
+    // For debugging
+    Serial.println("Ticket printed with ref: " + bus.referenceNumber);
+    bus.printHaltStats();
+}
+
+// Print halt statistics report
+void printHaltStats() {
+    ticketPrinter.printHaltStats(bus, timeManager);
+    Serial.println("Halt statistics printed");
+}
+
+// Function to send data to Firebase, now called from loop()
+void sendToFirebase() {
+    // Only send data if Firebase is initialized correctly
+    if (firebase.isConnected()) {
+        firebase.sendBusData(
+            DEVICE_ID,
+            bus.latitude = gps.getLatitude(),
+            bus.longitude = gps.getLongitude(),
+            bus.speed = gps.getSpeedKmh(),
+            bus.time,  // Uses the time from TimeManager
+            bus.getCurrentHaltName(),
+            bus.passengerCount,
+            bus.getDestinationHaltName()
+        );
+    } else {
+        // Try to reconnect if not connected
+        firebase.begin();
+    }
 }
 
 void loop() {
+    // Handle key inputs
     keyReceiver.check_Key_and_Execute();
     
-    // Note: No need to call lv_timer_handler() here
-    // because it's being handled by the displayTicker
+    // Check if it's time to send data to Firebase
+    unsigned long currentMillis = millis();
+    if (currentMillis - previousFirebaseMillis >= FIREBASE_INTERVAL) {
+        previousFirebaseMillis = currentMillis;
+        sendToFirebase();
+    }
     
-    // No need for delay in the main loop
+    // Very small delay to allow ESP32 to handle background tasks
+    delay(1);
 }

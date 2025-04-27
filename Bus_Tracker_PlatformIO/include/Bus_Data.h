@@ -36,6 +36,7 @@ public:
     // GPS Location
     float latitude = 0.0f;
     float longitude = 0.0f;
+    float speed = 0.0f;
 
     
     // Bus halts along Galkissa – Piliyandala route
