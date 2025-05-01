@@ -2,26 +2,22 @@
 #define CONFIG_H
 
 // Device Identification
-#define DEVICE_ID "BUS001"
+#define DEVICE_ID "bus10001"
 
 // Serial Port Configurations
 #define GPS_SERIAL_NUM 2    // UART2
-#define GPRS_SERIAL_NUM 1   // UART1
+#define PRINTER_SERIAL_NUM 1   // UART1
 #define DEBUG_BAUD_RATE 115200
 #define GPS_BAUD_RATE 9600
 #define GPRS_BAUD_RATE 38400
 
 // GPS Pin Configuration
-#define GPS_RX_PIN GPIO_NUM_16
-#define GPS_TX_PIN GPIO_NUM_17
+#define GPS_RX_PIN 16  // Using numeric value instead of GPIO_NUM_16
+#define GPS_TX_PIN 17  // Using numeric value instead of GPIO_NUM_17
 
 // GPRS Pin Configuration
-#define GPRS_RX_PIN GPIO_NUM_4
-#define GPRS_TX_PIN GPIO_NUM_5
-
-// Keypad Pin Configuration
-const uint8_t KEYPAD_ROW_PINS[4] = {13, 12, 14, 27};
-const uint8_t KEYPAD_COL_PINS[4] = {26, 25, 33, 32};
+#define PRINTER_RX_PIN 5  // Using numeric value instead of GPIO_NUM_5
+#define PRINTER_TX_PIN 4  // Using numeric value instead of GPIO_NUM_4
 
 // GPRS Network Configuration
 #define GPRS_APN "internet"
@@ -36,15 +32,23 @@ const uint8_t KEYPAD_COL_PINS[4] = {26, 25, 33, 32};
 #define GPS_UPDATE_INTERVAL 1000     // 1 second in milliseconds
 
 // Buffer Sizes
-#define TCP_MESSAGE_BUFFER_SIZE 200
-#define SMS_MESSAGE_BUFFER_SIZE 100
+#define TCP_MESSAGE_BUFFER_SIZE 256  // Use the larger buffer size
 
-// Printer UART
-#define TX_PIN 18  
-#define RX_PIN 19  
+// Screen settings
+#define SCREEN_WIDTH 320
+#define SCREEN_HEIGHT 240
 
-// Keypad pin definitions
-const uint8_t ROW_PINS[4] = {13, 12, 14, 27}; // Connect to the row pinouts of the keypad
-const uint8_t COL_PINS[4] = {26, 25, 33, 32}; // Connect to the column pinouts of the keypad
+// WiFi settings
+#define WIFI_SSID "Chiki Chiki Bamba"
+#define WIFI_PASSWORD "DiscreteFourierTransform"
 
-#endif // CONFIG_H 
+// Firebase settings
+#define FIREBASE_API_KEY "AIzaSyAq2WTJzbLY3nO_cjqc54rK3BNsouW8Ypk"
+#define FIREBASE_DATABASE_URL "https://syntrack-52802-default-rtdb.firebaseio.com"
+
+const unsigned long FIREBASE_INTERVAL = 10000; // milliseconds
+
+const int BUZZER_PIN = 2;
+
+#endif // CONFIG_H
+

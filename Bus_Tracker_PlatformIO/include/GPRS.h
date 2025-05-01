@@ -14,6 +14,7 @@ private:
         while (millis() - start < timeout) {
             if (gprsSerial->available()) {
                 String response = gprsSerial->readStringUntil('\n');
+                Serial.println(response);
                 if (response.indexOf("OK") >= 0) return true;
                 if (response.indexOf("ERROR") >= 0) return false;
             }

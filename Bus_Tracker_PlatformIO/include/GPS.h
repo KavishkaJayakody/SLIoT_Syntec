@@ -19,6 +19,7 @@ private:
     char posStatus;
     float decimalLong;
     float decimalLat;
+    float speed;
 
     float nmeaToDecimal(float coordinate) {
         int degree = (int)(coordinate/100);
@@ -41,8 +42,10 @@ private:
             decimalLong = nmeaToDecimal(nmeaLong);
         }
         else if (!strncmp(strParse, "$GPRMC", 6)) {
-            sscanf(strParse, "$GPRMC,%f,%c,%f,%c,%f,%c",
-                &utcTime, &posStatus, &nmeaLat, &northsouth, &nmeaLong, &eastwest);
+            // Modified to extract speed information
+            // GPRMC format: $GPRMC,time,status,lat,N/S,long,E/W,speed,course,date,mag_var,E/W*checksum
+            sscanf(strParse, "$GPRMC,%f,%c,%f,%c,%f,%c,%f",
+                &utcTime, &posStatus, &nmeaLat, &northsouth, &nmeaLong, &eastwest, &speed);
             decimalLat = nmeaToDecimal(nmeaLat);
             decimalLong = nmeaToDecimal(nmeaLong);
         }
@@ -53,21 +56,21 @@ private:
         char calculatedString[3];
         int index = 0;
         int calculatedCheck = 0;
-
+        
         if(nmea[index] == '$')
             index++;
         else
             return false;
-
+        
         while((nmea[index] != 0) && (nmea[index] != '*') && (index < 75)) {
             calculatedCheck ^= nmea[index];
             index++;
         }
-
+        
         if(index >= 75) {
             return false;
         }
-
+        
         if (nmea[index] == '*') {
             check[0] = nmea[index+1];
             check[1] = nmea[index+2];
@@ -75,7 +78,7 @@ private:
         }
         else
             return false;
-
+        
         sprintf(calculatedString,"%02X",calculatedCheck);
         return((calculatedString[0] == check[0]) && (calculatedString[1] == check[1]));
     }
@@ -84,6 +87,7 @@ public:
     GPS(HardwareSerial* serial, int rxPin, int txPin, int baud = 9600) {
         gpsSerial = serial;
         rxIndex = 0;
+        speed = 0.0; 
         memset(rxBuffer, 0, RX_BUFFER_SIZE);
         gpsSerial->begin(baud, SERIAL_8N1, rxPin, txPin);
     }
@@ -110,6 +114,7 @@ public:
     char getNorthSouth() const { return northsouth; }
     char getEastWest() const { return eastwest; }
     char getPosStatus() const { return posStatus; }
+    float getSpeedKmh() const { return speed; }
 };
 
 #endif // GPS_H
