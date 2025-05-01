@@ -23,6 +23,7 @@ FirebaseConnector firebase;
 TimeManager timeManager;
 BusPreferences preferences;
 
+
 // Ticker objects for timers
 Ticker gpsTicker;
 Ticker displayTicker;

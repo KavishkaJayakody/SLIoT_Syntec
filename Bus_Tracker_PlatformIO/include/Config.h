@@ -51,3 +51,4 @@ const unsigned long FIREBASE_INTERVAL = 10000; // milliseconds
 const int BUZZER_PIN = 2;
 
 #endif // CONFIG_H
+
